@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Sign in · Concert Watcher{% endblock %}
+{% block body_class %}page-login{% endblock %}
+{% block body %}
+<main class="login">
+  <div class="login-head">
+    {% include "_logo.html" %}
+    <h1>Concert Watcher</h1>
+    <p class="muted">Japan · live shows and ticket lotteries</p>
+  </div>
+  <form method="post" action="/login" class="login-form">
+    <input type="hidden" name="next" value="{{ next }}">
+    <label class="field">Password
+      <input type="password" name="password" autocomplete="current-password" required autofocus
+             {% if error %}aria-invalid="true" aria-describedby="login-error"{% endif %}>
+    </label>
+    {% if error %}<p class="error" id="login-error" role="alert">{{ error }}</p>{% endif %}
+    <button class="btn-primary btn-block">Sign in</button>
+    <p class="muted small">Stays signed in on this device for 30 days.</p>
+  </form>
+</main>
+{% endblock %}

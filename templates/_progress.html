@@ -1,0 +1,39 @@
+{#- Live scan progress. static/scan.js renders it from the JSON below and keeps it current while the scan runs. -#}
+<div class="progress" data-progress data-run="{{ snap.run.id if snap else 0 }}" data-after="{{ after_run or 0 }}">
+  <script type="application/json" data-progress-init>{{ snap | tojson }}</script>
+
+  <section class="card live" aria-live="polite">
+    <div class="live-head">
+      <span class="live-state" data-state>{{ 'Starting…' if not snap else '' }}</span>
+      <span class="live-clock" data-elapsed></span>
+    </div>
+    <div class="live-now">
+      <p class="live-now-text" data-now>{% if snap %}{{ snap.run.current or snap.run.summary }}{% else %}Starting the scan…{% endif %}</p>
+      <p class="live-now-sub" data-now-sub></p>
+    </div>
+    <div class="bar" role="progressbar" aria-label="Scan progress" aria-valuemin="0" aria-valuemax="100" data-bar>
+      <span data-bar-fill></span>
+    </div>
+    <div class="live-meta">
+      <span class="live-pct" data-pct></span>
+      <span class="live-eta" data-eta></span>
+      <span class="live-cost" data-cost></span>
+    </div>
+    <ol class="phases" data-phases></ol>
+    <dl class="live-stats" data-stats></dl>
+    <noscript><p class="muted small">Turn on JavaScript to follow the scan live.</p></noscript>
+  </section>
+
+  <div class="groups" data-groups></div>
+
+  <section class="card logbox">
+    <div class="logbox-head">
+      <h2 class="eyebrow">Log</h2>
+      <span class="muted small" data-log-count></span>
+      <span class="spacer"></span>
+      <label class="follow"><input type="checkbox" data-follow checked> Follow</label>
+    </div>
+    <ol class="log" data-log tabindex="0" aria-label="Scan log"></ol>
+  </section>
+</div>
+<script src="/static/scan.js?v=5" defer></script>

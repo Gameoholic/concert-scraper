@@ -1,0 +1,52 @@
+{% extends "_page.html" %}
+{% from "_show.html" import card with context %}
+{% block title %}Shows · Concert Watcher{% endblock %}
+{% block page %}
+{%- set back = request.url.path ~ ("?" ~ request.url.query if request.url.query else "") -%}
+<div class="page-head">
+  <h1>Shows</h1>
+  <p class="muted">
+    {{ total }} found for {{ trip_label }}
+    {%- if last_run %} · last scan {{ last_run.started_at | jst }}{% if last_run.status == "running" %} (running){% endif %}{% endif %}
+  </p>
+</div>
+
+<nav class="chips" aria-label="Filter by fit">
+  <a class="chip-link{% if not fit_filter and not hidden %} on{% endif %}" href="/shows">All <span>{{ total }}</span></a>
+  {% for f in ("fits", "detour", "tba", "outside") %}
+  <a class="chip-link chip-{{ f }}{% if fit_filter == f %} on{% endif %}" href="/shows?fit={{ f }}">{{ FIT_LABEL[f] }} <span>{{ counts[f] }}</span></a>
+  {% endfor %}
+  {% if hidden_count %}<a class="chip-link{% if hidden %} on{% endif %}" href="/shows?hidden=1">Hidden <span>{{ hidden_count }}</span></a>{% endif %}
+</nav>
+
+{% set any = groups.deadlines or groups.dated or groups.tba %}
+{% if groups.deadlines %}
+<section class="show-group">
+  <h2 class="eyebrow">Ticket rounds open or coming · soonest deadline first</h2>
+  {% for s in groups.deadlines %}{{ card(s, back) }}{% endfor %}
+</section>
+{% endif %}
+{% if groups.dated %}
+<section class="show-group">
+  <h2 class="eyebrow">By date · no open round</h2>
+  {% for s in groups.dated %}{{ card(s, back) }}{% endfor %}
+</section>
+{% endif %}
+{% if groups.tba %}
+<section class="show-group">
+  <h2 class="eyebrow">Date not announced</h2>
+  {% for s in groups.tba %}{{ card(s, back) }}{% endfor %}
+</section>
+{% endif %}
+{% if not any %}
+<div class="card empty-state">
+  {% if fit_filter or hidden %}
+  <p>Nothing here with this filter. <a href="/shows">Show all</a></p>
+  {% else %}
+  <p><b>No shows found yet.</b></p>
+  <p class="muted">Paste each artist's links on <a href="/">Artists</a>, then <a href="/scans">run a scan</a>.
+  Shows in Japan from {{ trip_label }} (and ones with dates TBA) appear here.</p>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

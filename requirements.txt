@@ -1,0 +1,15 @@
+fastapi==0.163.0
+starlette==1.10.0
+uvicorn==0.54.0
+Jinja2==3.1.6
+python-multipart==0.0.33
+itsdangerous==2.2.0
+python-dotenv==1.2.4
+httpx==0.28.1
+pytest==9.2.0
+# step 2: scanning, classification
+anthropic==2.8.0
+apify-client==3.5.1
+beautifulsoup4==4.15.0
+playwright==1.65.2
+pillow==13.0.0            # shrinks flyer images over Claude's size limit

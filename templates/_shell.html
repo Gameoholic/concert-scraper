@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block body %}
+{% include "_topbar.html" %}
+<div class="split {% block split_class %}{% endblock %}">
+  <aside class="pane-list" id="pane-list" data-live>
+    {% include "_list.html" %}
+  </aside>
+  <main class="pane-detail" id="pane-detail">
+    {% block detail %}{% endblock %}
+  </main>
+</div>
+{% include "_tabbar.html" %}
+{% include "_confirm.html" %}
+{% endblock %}

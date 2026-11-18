@@ -1,0 +1,50 @@
+{% extends "_page.html" %}
+{% block title %}Trip · Concert Watcher{% endblock %}
+{% block page %}
+<div class="page-head">
+  <h1>Trip</h1>
+  <p class="muted">Where you sleep each night. Every show is marked from this.</p>
+</div>
+
+<form class="card trip" method="post" action="/trip" data-trip>
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  <div class="trip-head" aria-hidden="true"><span>From</span><span>To (leave)</span><span>City</span><span></span></div>
+  <div class="trip-rows" data-trip-rows>
+    {% for s, e, c in rows %}
+    <div class="trip-row" data-trip-row>
+      <input type="date" name="start" value="{{ s }}" aria-label="From" required>
+      <input type="date" name="end" value="{{ e }}" aria-label="To" required>
+      <input name="city" value="{{ c }}" aria-label="City" placeholder="City" maxlength="60" autocomplete="off" required>
+      <button type="button" class="icon-btn" data-trip-remove aria-label="Remove this stay">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    {% endfor %}
+  </div>
+  <template data-trip-template>
+    <div class="trip-row" data-trip-row>
+      <input type="date" name="start" aria-label="From" required>
+      <input type="date" name="end" aria-label="To" required>
+      <input name="city" aria-label="City" placeholder="City" maxlength="60" autocomplete="off" required>
+      <button type="button" class="icon-btn" data-trip-remove aria-label="Remove this stay">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+  </template>
+  <noscript><p class="muted small">Adding or removing a stay needs JavaScript; editing works without it.</p></noscript>
+  <div class="trip-actions">
+    <button type="button" class="btn-secondary" data-trip-add>Add a stay</button>
+    <button class="btn-primary">Save trip</button>
+  </div>
+</form>
+
+<section class="card rules">
+  <h2 class="eyebrow">How shows are marked</h2>
+  <ul>
+    <li><span class="fit fit-fits">Fits</span> you sleep in that city that night. Yokohama, Kawasaki, Saitama and Chiba count as Tokyo; Kobe, Kyoto and Nara count as Osaka.</li>
+    <li><span class="fit fit-detour">Detour</span> you're in Japan that night, somewhere else.</li>
+    <li><span class="fit fit-outside">Outside trip</span> not a night of the trip. The "To" day of the last stay is departure day.</li>
+  </ul>
+  <p class="muted small">Shows dated {{ window[0].strftime("%b") }} {{ window[0].day }} – {{ window[1].strftime("%b") }} {{ window[1].day }}, {{ window[1].year }} (the trip's months) are watched, plus ones with dates not announced yet. Changing the trip re-marks every show; it doesn't re-scan.</p>
+</section>
+{% endblock %}

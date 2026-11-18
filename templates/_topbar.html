@@ -1,0 +1,10 @@
+<header class="topbar">
+  <a class="brand" href="/shows">
+    {% include "_logo.html" %}
+    <span>Concert Watcher</span>
+  </a>
+  <span class="topbar-dates">{{ trip_label }}</span>
+  {% include "_nav.html" %}
+  <span class="spacer"></span>
+  <form method="post" action="/logout"><button class="btn-quiet">Sign out</button></form>
+</header>

@@ -1,0 +1,22 @@
+[Unit]
+Description=Concert Watcher web UI
+After=network.target
+
+[Service]
+Type=simple
+User=concert
+Group=concert
+WorkingDirectory=/opt/concert-scraper
+ExecStart=/opt/concert-scraper/.venv/bin/uvicorn app.main:create_app --factory --host 127.0.0.1 --port 8000 --proxy-headers --forwarded-allow-ips 127.0.0.1
+Restart=always
+RestartSec=3
+# Stopping or restarting the web app stops only uvicorn: a scan started from the app (its own process) keeps
+# running and finishes. If a scan's process does die, the Scans page says so at once and offers "Resume".
+KillMode=process
+# hardening
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

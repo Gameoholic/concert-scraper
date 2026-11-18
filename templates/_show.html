@@ -1,0 +1,66 @@
+{%- macro state_pill(r) -%}
+{%- if r.state == "open" -%}<span class="state state-open">Open</span>
+{%- elif r.state == "upcoming" -%}<span class="state state-upcoming">Opens {{ r.opens_at | when }}</span>
+{%- elif r.state == "closed" -%}<span class="state state-closed">Closed</span>
+{%- else -%}<span class="state state-unknown">Dates TBA</span>{%- endif -%}
+{%- endmacro -%}
+
+{%- macro card(s, back="/shows", show_artist=True) -%}
+<article class="card show{% if s.cancelled %} cancelled{% endif %}" id="show-{{ s.id }}">
+  <div class="show-top">
+    <div class="show-date{% if not s.date %} tba{% endif %}">
+      {%- if s.date -%}
+      <span class="sd-m">{{ s.date.strftime("%b") }}</span><span class="sd-d">{{ s.date.day }}</span><span class="sd-w">{{ s.date.strftime("%a") }}</span>
+      {%- else -%}<span class="sd-m">Date</span><span class="sd-d sd-tba">TBA</span>{%- endif -%}
+    </div>
+    <div class="show-main">
+      {% if show_artist %}
+      <a class="show-artist" href="/artists/{{ s.artist_id }}"><span class="badge badge-sm tier-{{ s.tier|lower }}">{{ s.tier }}</span>{{ s.artist }}</a>
+      {% endif %}
+      <h3 class="show-title" lang="ja">{{ s.title }}</h3>
+      <p class="show-place" lang="ja">{{ s.place }}{% if s.time_note %} · {{ s.time_note }}{% endif %}</p>
+      <p class="show-fit">
+        <span class="fit fit-{{ s.fit }}">{{ FIT_LABEL[s.fit] }}</span>
+        {%- if s.cancelled %} <span class="fit fit-cancelled">Cancelled</span>{% endif %}
+        {%- if s.stay and s.fit == "detour" %} <span class="muted small">you're in {{ s.stay }} that night</span>{% endif %}
+      </p>
+    </div>
+  </div>
+  {% if s.notes %}<p class="show-notes" lang="ja">{{ s.notes }}</p>{% endif %}
+  {% if s.rounds %}
+  <ul class="rounds">
+    {% for r in s.rounds %}
+    <li class="round round-{{ r.state }}">
+      <div class="round-head">
+        <span class="round-name" lang="ja">{{ r.name }}</span>
+        {{ state_pill(r) }}
+      </div>
+      <div class="round-when">
+        {%- set bits = [] -%}
+        {%- if r.lottery %}{% set _ = bits.append("Lottery") %}{% endif -%}
+        {%- if r.opens_at and r.closes_at %}{% set _ = bits.append((r.opens_at | when) ~ " → " ~ (r.closes_at | when)) %}
+        {%- elif r.opens_at %}{% set _ = bits.append("from " ~ (r.opens_at | when)) %}
+        {%- elif r.closes_at %}{% set _ = bits.append("until " ~ (r.closes_at | when)) %}{% endif -%}
+        {%- if r.results_at %}{% set _ = bits.append("results " ~ (r.results_at | when)) %}{% endif -%}
+        {{ bits | join(" · ") }}
+      </div>
+      {% if r.price or r.notes %}<div class="round-notes" lang="ja">{{ [r.price, r.notes] | select | join(" · ") }}</div>{% endif %}
+      {% if r.url and r.state != "closed" %}<a class="round-link" href="{{ r.url }}" target="_blank" rel="noopener noreferrer">Apply / details ↗</a>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="rounds-none">No ticket round announced yet.</p>
+  {% endif %}
+  <div class="show-foot">
+    <span class="show-links">
+      {% for url, label in s.links[-4:] %}<a href="{{ url }}" target="_blank" rel="noopener noreferrer">{{ label }}</a>{% endfor %}
+    </span>
+    <form method="post" action="/shows/{{ s.id }}/hide">
+      <input type="hidden" name="back" value="{{ back }}">
+      <input type="hidden" name="hide" value="{{ '0' if s.hidden else '1' }}">
+      <button class="btn-quiet btn-sm">{{ "Unhide" if s.hidden else "Hide" }}</button>
+    </form>
+  </div>
+</article>
+{%- endmacro -%}

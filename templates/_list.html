@@ -1,0 +1,91 @@
+{%- macro pills(a) -%}
+<span class="pills">
+  {%- for k in COVERAGE_KINDS %}{% set n = a.count(k) %}
+  {%- if n %}<span class="pill on" title="{{ KINDS[k] }}: {{ n }}">{{ SHORT[k] }}{% if n > 1 %} {{ n }}{% endif %}</span>
+  {%- else %}<span class="pill off" title="{{ KINDS[k] }}: missing"><span class="sr">{{ KINDS[k] }} missing</span></span>{% endif %}
+  {%- endfor %}
+</span>
+{%- endmacro -%}
+{%- macro row(a) -%}
+<a class="row{% if not a.enabled %} paused{% endif %}" href="/artists/{{ a.id }}" data-search="{{ a.search_text() }}"
+   {% if a.id == selected_id %}aria-current="page"{% endif %}>
+  <span class="row-names">
+    <span class="row-name">{{ a.name }}</span>
+    {%- if a.name_ja %}<span class="row-ja" lang="ja">{{ a.name_ja }}</span>{% endif %}
+  </span>
+  {%- if a.enabled %}{{ pills(a) }}{% else %}<span class="tag">Tier {{ a.tier }}</span>{% endif %}
+  <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+</a>
+{%- endmacro -%}
+
+<div class="list">
+  <div class="list-head">
+    <div class="list-title">
+      <h1>Artists</h1>
+      <a class="btn-primary btn-pill" href="/artists/new">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        Add
+      </a>
+    </div>
+    <p class="muted">{{ watching_count }} watching{% if paused_count %} · {{ paused_count }} paused{% endif %}</p>
+  </div>
+
+  <section class="card missing" aria-labelledby="missing-h">
+    <div class="missing-head">
+      <h2 id="missing-h" class="eyebrow">Missing</h2>
+      {% if missing %}<a href="/" class="small-link">Show all</a>{% else %}<span class="muted small">tap to filter</span>{% endif %}
+    </div>
+    <div class="missing-grid">
+      {% for k in COVERAGE_KINDS %}
+      <a class="miss{% if missing == k %} active{% endif %}" href="{{ '/' if missing == k else '/?missing=' ~ k }}"
+         {% if missing == k %}aria-current="true"{% endif %}>
+        <span class="miss-n">{{ coverage[k] }}</span>
+        <span class="miss-k">{{ KINDS[k] }}</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% if missing %}<p class="muted small">{{ shown_count }} watching artist{{ '' if shown_count == 1 else 's' }} without {{ missing_label }}.</p>{% endif %}
+  </section>
+
+  <form class="search" method="get" action="/" role="search">
+    {% if missing %}<input type="hidden" name="missing" value="{{ missing }}">{% endif %}
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+    <input type="search" name="q" value="{{ q }}" placeholder="Search name or 日本語" aria-label="Search artists"
+           autocomplete="off" data-filter>
+  </form>
+
+  {% for tier, artists in groups if artists %}
+  <section class="tier" data-group>
+    <div class="tier-head">
+      <span class="badge tier-{{ tier|lower }}">{{ tier }}</span>
+      <h2>Tier {{ tier }}</h2>
+      <span class="muted" data-count>{{ artists|length }}</span>
+      <span class="spacer"></span>
+      <span class="pills legend" aria-hidden="true"><span>IG</span><span>X</span><span>SITE</span></span>
+      <span class="chev-space"></span>
+    </div>
+    <div class="card rows">
+      {% for a in artists %}{{ row(a) }}{% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+
+  {% if paused %}
+  <section class="tier" data-group>
+    <div class="tier-head">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" class="muted"><path d="M9 6v12M15 6v12"/></svg>
+      <h2 class="muted">Paused</h2>
+      <span class="muted">{{ paused|length }} · not swept, no alerts</span>
+    </div>
+    <div class="card rows">
+      {% for a in paused %}{{ row(a) }}{% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  <p class="empty" data-empty {% if shown_count or paused %}hidden{% endif %}>
+    {% if missing and not q %}Every watching artist has {{ missing_label }}.{% else %}No artist matches that.{% endif %}
+  </p>
+
+  <form class="list-foot" method="post" action="/logout"><button class="btn-quiet">Sign out</button></form>
+</div>

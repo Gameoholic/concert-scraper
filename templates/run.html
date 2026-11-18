@@ -1,0 +1,24 @@
+{% extends "_page.html" %}
+{% block title %}Scan {{ run.started_at | jst }} · Concert Watcher{% endblock %}
+{% block page %}
+<nav class="back back-page"><a href="/scans">{% include "_back.html" %}Scans</a></nav>
+<div class="page-head">
+  <h1>Scan of {{ run.started_at | jst }}</h1>
+  <p class="muted">{{ {'cron': 'Scheduled', 'ui': 'Started from the app', 'cli': 'Started by hand'}.get(run.trigger, run.trigger) }}{% if run.scope != 'all' %} · selected artists{% endif %}{% if run.dry_run %} · dry run{% endif %}</p>
+</div>
+{% include "_progress.html" %}
+
+<details class="card group-steps data" data-data="/scans/{{ run.id }}/data">
+  <summary>
+    <span class="g-icon" aria-hidden="true">DATA</span>
+    <span class="g-main">
+      <span class="g-title">What this scan read</span>
+      <span class="g-meta">{% if read.all %}{{ '{:,}'.format(read.all) }} post{{ 's' if read.all != 1 }} and page versions · {{ read.relevant }} about a show{% if read.waiting %} · {{ read.waiting }} not read by Claude yet{% endif %}{% else %}Nothing new: no new posts or changed pages{% endif %}</span>
+    </span>
+    <span class="g-bar" aria-hidden="true"></span>
+    <svg class="g-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+  </summary>
+  <div class="data-body" data-data-body aria-live="polite"><p class="muted small data-loading">Loading…</p></div>
+</details>
+<script src="/static/data.js?v=1" defer></script>
+{% endblock %}

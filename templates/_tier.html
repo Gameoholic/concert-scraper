@@ -1,0 +1,8 @@
+<fieldset class="field seg-field">
+  <legend>Tier</legend>
+  <div class="seg tier-seg">
+    {% for t in TIERS %}
+    <label><input type="radio" name="tier" value="{{ t }}" {% if current == t %}checked{% endif %} required><span>{{ t }}</span></label>
+    {% endfor %}
+  </div>
+</fieldset>

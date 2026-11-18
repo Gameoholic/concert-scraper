@@ -1,0 +1,56 @@
+{#- One page of what a scan read, for the scan page's data view (static/data.js). The first page has the filters. -#}
+{% set KIND = {'x': '𝕏', 'instagram': 'IG', 'website': 'WEB', 'fanclub': 'FC'} %}
+{% if counts %}
+<div class="data-filters" role="group" aria-label="Filter">
+  {% for key, label, n in [('', 'All', counts.all), ('relevant', 'Shows', counts.relevant), ('other', 'Not a show', counts.other), ('waiting', 'Not read by Claude', counts.waiting)] %}
+  {% if n or key in ('', 'relevant') %}
+  <button type="button" class="chip-filter{{ ' is-on' if verdict == key }}" data-filter="{{ key }}" aria-pressed="{{ 'true' if verdict == key else 'false' }}">{{ label }} <span>{{ '{:,}'.format(n) }}</span></button>
+  {% endif %}
+  {% endfor %}
+  {% if counts.artists|length > 1 %}
+  <label class="data-artist">
+    <span class="sr-only">Artist</span>
+    <select data-artist>
+      <option value="0">All artists</option>
+      {% for id, name, n, rel in counts.artists %}
+      <option value="{{ id }}"{{ ' selected' if artist == id }}>{{ name }} · {{ n }}{% if rel %} · {{ rel }} show{{ 's' if rel != 1 }}{% endif %}</option>
+      {% endfor %}
+    </select>
+  </label>
+  {% endif %}
+</div>
+<ol class="data-list" data-list>
+{% endif %}
+{% for it in items %}
+  <li class="post post-{{ 'show' if it.relevant else ('waiting' if it.relevant is none else 'other') }}">
+    <div class="post-head">
+      <span class="post-kind k-{{ it.kind }}" aria-label="{{ it.kind }}">{{ KIND.get(it.kind, 'WEB') }}</span>
+      <span class="post-who"><b>{{ it.artist }}</b> <span>{{ it.source }}</span></span>
+      <span class="post-verdict">{% if it.relevant %}Show{% elif it.relevant is none %}Not read yet{% else %}Not a show{% endif %}</span>
+    </div>
+    {% if it.note %}<p class="post-note"><span class="sr-only">Claude: </span>{{ it.note }}</p>{% endif %}
+    {% if it.shows %}
+    <p class="post-shows">{% for sid, label in it.shows %}<a href="/shows#show-{{ sid }}">→ {{ label }}</a>{% endfor %}</p>
+    {% endif %}
+    {% set text = it.text or '' %}
+    {% if text|length > 280 or (it.kind in ('website', 'fanclub') and text) %}
+    <details class="post-text"><summary>{{ it.excerpt }}</summary><div>{{ text[:6000] }}{% if text|length > 6000 %}…{% endif %}</div></details>
+    {% elif text %}
+    <p class="post-text">{{ text }}</p>
+    {% endif %}
+    <p class="post-meta">
+      {% if it.posted_at %}<span>Posted {{ it.posted_at | jst }}</span>{% elif it.kind in ('website', 'fanclub') %}<span>Page changed</span>{% endif %}
+      {% if it.images %}<span>{{ it.images }} image{{ 's' if it.images != 1 }}</span>{% endif %}
+      {% if not it.read_here %}<span>read by an earlier scan</span>{% endif %}
+      <a href="{{ it.url }}" target="_blank" rel="noopener noreferrer">Open</a>
+    </p>
+  </li>
+{% else %}
+  {% if counts %}<li class="data-empty">Nothing here.</li>{% endif %}
+{% endfor %}
+{% if more %}
+  <li class="data-more"><button type="button" class="btn-secondary btn-block" data-more="{{ next }}">Show more</button></li>
+{% endif %}
+{% if counts %}
+</ol>
+{% endif %}

@@ -1,0 +1,23 @@
+{% extends "_shell.html" %}
+{% block title %}Add artist · Concert Watcher{% endblock %}
+{% block split_class %}is-detail{% endblock %}
+{% block detail %}
+<div class="detail">
+  <nav class="back"><a href="/">{% include "_back.html" %}Artists</a></nav>
+  <header class="detail-head">
+    <h1>Add artist</h1>
+    <p class="muted">You'll paste their links on the next screen.</p>
+  </header>
+  <form class="card fields" method="post" action="/artists">
+    {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+    <label class="field">Name
+      <input name="name" value="{{ form.name or '' }}" required maxlength="120" autocomplete="off" autofocus>
+    </label>
+    <label class="field"><span>Japanese name <span class="optional">· optional</span></span>
+      <input name="name_ja" value="{{ form.name_ja or '' }}" maxlength="120" autocomplete="off" lang="ja">
+    </label>
+    {% with current=form.tier %}{% include "_tier.html" %}{% endwith %}
+    <button class="btn-primary btn-block">Add artist</button>
+  </form>
+</div>
+{% endblock %}

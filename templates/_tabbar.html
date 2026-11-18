@@ -1,0 +1,9 @@
+{% from "_nav.html" import icon with context %}
+{%- set tabs = [("shows", "/shows", "Shows"), ("artists", "/", "Artists"), ("trip", "/trip", "Trip"), ("scans", "/scans", "Scans")] -%}
+<nav class="tabbar" aria-label="Sections">
+  {% for key, href, label in tabs %}
+  <a href="{{ href }}" {% if nav == key %}aria-current="page"{% endif %}>
+    {{ icon(key) }}<span>{{ label }}</span>{% if key == "scans" and scan_running %}<span class="live-dot" title="Scanning"></span>{% endif %}
+  </a>
+  {% endfor %}
+</nav>

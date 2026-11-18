@@ -1,0 +1,10 @@
+.env
+.venv/
+data/
+__pycache__/
+*.pyc
+.pytest_cache/
+.claude/
+*.bak
+# personal: the manual sweep has the real trip itinerary
+docs/SWEEP.md

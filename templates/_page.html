@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block body %}
+{% include "_topbar.html" %}
+<main class="page" id="page">
+  {% block page %}{% endblock %}
+</main>
+{% include "_tabbar.html" %}
+{% include "_confirm.html" %}
+{% endblock %}

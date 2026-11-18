@@ -1,0 +1,96 @@
+{% extends "_page.html" %}
+{% block title %}Scans · Concert Watcher{% endblock %}
+{% block page %}
+<div class="page-head">
+  <h1>Scans</h1>
+  <p class="muted">Every {{ prefs.scan_every_hours }} hour{{ 's' if prefs.scan_every_hours != 1 }}, or now. Next scheduled scan: {{ next_scan }} Japan time{% if never_scheduled %} (none has run yet: that's the next full hour, once the hourly cron job is set up){% endif %}.</p>
+</div>
+
+{% if running or starting %}
+{% include "_progress.html" %}
+{% else %}
+{% if stopped %}
+<section class="card stopped" aria-labelledby="stopped-title">
+  <div class="stopped-head">
+    <span class="stopped-icon" aria-hidden="true">!</span>
+    <div>
+      <h2 class="stopped-title" id="stopped-title">The last scan stopped partway</h2>
+      <p class="muted small">Started {{ stopped.started_at | jst }}{% if stopped.finished_at %}, stopped {{ stopped.finished_at | jst }}{% endif %} · {{ stopped.errors or 'Stopped' }}</p>
+    </div>
+  </div>
+  {% if stopped.current %}<p class="stopped-last small">Last thing it did: {{ stopped.current | replace('Stopped: ', '') }}</p>{% endif %}
+  <form method="post" action="/scans/{{ stopped.id }}/resume">
+    <button class="btn-primary btn-block">Resume</button>
+  </form>
+  <p class="muted small">Reads only the sources it didn't finish, then Claude reads everything still waiting and the alerts go out. <a href="/scans/{{ stopped.id }}">What it did</a></p>
+</section>
+{% endif %}
+<section class="card scan-now">
+  <form method="post" action="/scan">
+    <button class="{{ 'btn-secondary' if stopped else 'btn-primary' }} btn-block">Scan everyone now</button>
+  </form>
+  <p class="muted small">Reads new posts and changed pages for every watched artist, with live progress here. A single artist can be scanned from their page.</p>
+</section>
+{% endif %}
+
+<section class="card schedule" id="schedule" aria-labelledby="schedule-title">
+  <h2 class="eyebrow" id="schedule-title">Schedule</h2>
+  <form method="post" action="/scans/schedule" class="schedule-form">
+    <label class="field">Scan everyone every
+      <span class="unit-input"><input type="number" name="scan_every_hours" min="1" max="168" step="1" inputmode="numeric" required value="{{ prefs.scan_every_hours }}"><span>hours</span></span>
+      <span class="hint">Counted from when the last scheduled scan started. Next: {{ next_scan }} Japan time.</span>
+    </label>
+    <label class="field">Instagram cooldown
+      <span class="unit-input"><input type="number" name="instagram_cooldown_hours" min="0" max="168" step="1" inputmode="numeric" required value="{{ prefs.instagram_cooldown_hours }}"><span>hours</span></span>
+      <span class="hint">0 = read on every scan, like X. Each Instagram read costs about $0.06 even when nothing is new: about $3.60 a month at 2 scans a day.</span>
+    </label>
+    <button class="btn-primary">Save</button>
+  </form>
+</section>
+
+<section class="card setup-card">
+  <dl class="setup">
+    {% for name, ok in keys.items() %}
+    <div><dt>{{ name }}</dt><dd class="{{ 'is-ok' if ok else 'is-missing' }}">{% if ok %}set up{% else %}not set in .env{% endif %}</dd></div>
+    {% endfor %}
+    <div><dt>This month</dt><dd>${{ '%.2f' % apify_usd }} Apify · ${{ '%.2f' % claude_usd }} Claude</dd></div>
+  </dl>
+</section>
+
+{% if problems %}
+<section class="card problems">
+  <h2 class="eyebrow">Sources with errors · {{ problems|length }}</h2>
+  {% for a, s in problems %}
+  <a class="prob" href="/artists/{{ a.id }}#source-{{ s.id }}">
+    <span class="prob-name">{{ a.name }} · {{ s.display }}</span>
+    <span class="prob-err">{{ s.last_error }}</span>
+  </a>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% if never %}
+<section class="card problems">
+  <h2 class="eyebrow">Not scanned yet · {{ never|length }}</h2>
+  <p class="muted small">Picked up by the next scan.</p>
+  <p class="never">{% for a, s in never %}<a href="/artists/{{ a.id }}">{{ a.name }} · {{ s.display }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</p>
+</section>
+{% endif %}
+
+<section class="runs">
+  <h2 class="eyebrow">Recent scans</h2>
+  {% if not runs %}<p class="muted">No scans yet.</p>{% endif %}
+  <div class="card rows">
+    {% for r in runs %}
+    <a class="run run-{{ r.status }}" href="/scans/{{ r.id }}">
+      <span class="run-when">{{ r.started_at | jst }}</span>
+      <span class="run-what">
+        <span>{{ {'cron': 'scheduled', 'ui': 'from the app', 'cli': 'by hand'}.get(r.trigger, r.trigger) }}{% if r.scope != 'all' %} · selected artists{% endif %}</span>
+        <span class="run-sum">{{ r.summary or '—' }}</span>
+      </span>
+      <span class="run-status">{{ {'ok': 'OK', 'partial': 'Some errors', 'error': 'Failed', 'running': 'Running'}[r.status] }}</span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

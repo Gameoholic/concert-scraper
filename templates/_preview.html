@@ -1,0 +1,41 @@
+{%- set picks = picks or {} -%}
+{%- set addable = candidates | selectattr("addable") | list -%}
+{% if candidates %}
+<div class="preview">
+  {% for c in candidates %}{% set i = loop.index0 %}
+  <div class="pv-row pv-{{ c.status }}">
+    <span class="chip {% if c.status == 'ambiguous' %}chip-amb{% elif c.status in ('duplicate', 'invalid') %}chip-off{% else %}chip-on{% endif %}">
+      {%- if c.status == 'ambiguous' %}?{% elif c.kind %}{{ SHORT[c.kind] }}{% else %}–{% endif -%}
+    </span>
+    <span class="pv-text">
+      <span class="pv-value">{{ c.display }}</span>
+      <span class="pv-note">{{ c.message }}{% if c.label and c.status == 'new' %} · labelled “{{ c.label }}”{% endif %}</span>
+    </span>
+    {% if c.addable and c.choices %}
+      {% if c.status == 'ambiguous' or c.kind in ('instagram', 'x') %}
+      <fieldset class="seg seg-sm" data-pick="{{ c.raw }}">
+        <legend class="sr">Type for {{ c.display }}</legend>
+        {% for k in c.choices %}
+        <label><input type="radio" name="kind_{{ i }}" value="{{ k }}" required
+               {% if picks.get(i) == k or (c.status != 'ambiguous' and c.kind == k and not picks.get(i)) %}checked{% endif %}><span>{{ SHORT[k] }}</span></label>
+        {% endfor %}
+      </fieldset>
+      {% else %}
+      <label class="pv-select">
+        <span class="sr">Type for {{ c.display }}</span>
+        <select name="kind_{{ i }}" data-pick="{{ c.raw }}">
+          {% for k in c.choices %}<option value="{{ k }}" {% if (picks.get(i) or c.kind) == k %}selected{% endif %}>{{ KINDS[k] }}</option>{% endfor %}
+        </select>
+      </label>
+      {% endif %}
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+<div class="paste-actions">
+  <button class="btn-primary" {% if not addable %}disabled{% endif %}>
+    {% if addable %}Add {{ addable|length }} source{{ '' if addable|length == 1 else 's' }}{% else %}Add sources{% endif %}
+  </button>
+  {% if candidates %}<button type="button" class="btn-secondary" data-clear>Clear</button>{% endif %}
+</div>
