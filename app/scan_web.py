@@ -125,12 +125,31 @@ class Browser:
     def __init__(self) -> None:
         self._pw = None
         self._browser = None
+        self._broken = ""          # why Chromium couldn't start; then every page fails fast with that reason
+
+    def _start(self) -> None:
+        if self._broken:
+            raise FetchError(self._broken)
+        from playwright.sync_api import sync_playwright
+        try:
+            self._pw = sync_playwright().start()
+            self._browser = self._pw.chromium.launch()
+        except Exception as e:
+            # Stop Playwright, or the next start in this thread fails with "Sync API inside the asyncio loop".
+            if self._pw:
+                try:
+                    self._pw.stop()
+                except Exception:
+                    pass
+            self._pw = self._browser = None
+            first_line = (str(e).splitlines() or [""])[0]
+            self._broken = (f"Browser: headless Chromium won't start ({type(e).__name__}: {first_line[:150]}). "
+                            "On the server run: .venv/bin/python -m playwright install chromium")
+            raise FetchError(self._broken) from e
 
     def html(self, url: str) -> tuple[str, str]:
         if self._browser is None:
-            from playwright.sync_api import sync_playwright
-            self._pw = sync_playwright().start()
-            self._browser = self._pw.chromium.launch()
+            self._start()
         ctx = self._browser.new_context(user_agent=UA, locale="ja-JP")
         try:
             page = ctx.new_page()
