@@ -166,10 +166,12 @@ class Browser:
             ctx.close()
 
     def close(self) -> None:
-        if self._browser:
-            self._browser.close()
-        if self._pw:
-            self._pw.stop()
+        for stop in (self._browser.close if self._browser else None, self._pw.stop if self._pw else None):
+            if stop:
+                try:
+                    stop()
+                except Exception as e:  # noqa: BLE001 - closing must never fail a scan that's done
+                    log.warning("closing the browser: %s", e)
         self._browser = self._pw = None
 
 

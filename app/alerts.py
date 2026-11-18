@@ -7,6 +7,7 @@ Details and links follow on the next lines.
 
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
 import time
@@ -32,6 +33,72 @@ ROUND_KIND = {"fanclub": "FC", "official": "official", "playguide": "playguide",
 DISCORD_LIMIT = 1900
 
 
+# ---------------------------------------------------------------- alert rules (the Scans page's Alerts card)
+
+PING, SILENT_POST, OFF = "ping", "silent", "off"
+MODES = {PING: "Ping me", SILENT_POST: "Post, no ping", OFF: "Don't post"}
+FITS_IN_ORDER = [fit.FITS, fit.DETOUR, fit.OUTSIDE, fit.TBA]
+KIND_LABEL = {"new_show": "New show", "date_set": "Date announced", "new_round": "New ticket round",
+              "deadline": "New opening or closing date of a ticket round", "cancelled": "Cancelled"}
+LINES = {"place": "Venue and time", "stay": "Where you sleep that night (detours)", "rounds": "Ticket rounds",
+         "round_extra": "Prices and notes of ticket rounds", "notes": "Show notes", "links": "Links (posts, all shows)"}
+RULES_KEY = "alert_rules"
+
+
+@dataclass
+class Rules:
+    """What gets posted, what pings, and what a message includes. Saved in `settings` as JSON."""
+    fit: dict[str, str] = field(default_factory=lambda: {fit.FITS: PING, fit.DETOUR: SILENT_POST,
+                                                         fit.OUTSIDE: SILENT_POST, fit.TBA: SILENT_POST})
+    kinds: dict[str, bool] = field(default_factory=lambda: {k: True for k in KIND_LABEL})
+    lines: dict[str, bool] = field(default_factory=lambda: {k: True for k in LINES})
+    x_fail_ping: bool = True            # the "scan finished" notice pings you when an X account failed
+
+    def mode(self, show_fit: str) -> str:
+        return self.fit.get(show_fit, SILENT_POST)
+
+    def to_json(self) -> str:
+        return json.dumps({"fit": self.fit, "kinds": self.kinds, "lines": self.lines, "x_fail_ping": self.x_fail_ping})
+
+    @classmethod
+    def parse(cls, raw: str | dict | None) -> "Rules":
+        """Anything missing or unknown falls back to the default, so an old or broken value never breaks alerts."""
+        r = cls()
+        try:
+            data = json.loads(raw) if isinstance(raw, str) else (raw or {})
+        except ValueError:
+            data = {}
+        for f, m in (data.get("fit") or {}).items():
+            if f in r.fit and m in MODES:
+                r.fit[f] = m
+        for name, target in (("kinds", r.kinds), ("lines", r.lines)):
+            for k, v in (data.get(name) or {}).items():
+                if k in target:
+                    target[k] = bool(v)
+        if "x_fail_ping" in data:
+            r.x_fail_ping = bool(data["x_fail_ping"])
+        return r
+
+    @classmethod
+    def from_form(cls, form) -> "Rules":
+        """From the Alerts card's form (unchecked boxes are simply absent)."""
+        return cls.parse({"fit": {f: form.get(f"fit_{f}", "") for f in FITS_IN_ORDER},
+                          "kinds": {k: bool(form.get(f"kind_{k}")) for k in KIND_LABEL},
+                          "lines": {k: bool(form.get(f"line_{k}")) for k in LINES},
+                          "x_fail_ping": bool(form.get("x_fail_ping"))})
+
+
+def load_rules(conn: sqlite3.Connection) -> Rules:
+    row = conn.execute("SELECT value FROM settings WHERE key = ?", (RULES_KEY,)).fetchone()
+    return Rules.parse(row[0] if row else None)
+
+
+def save_rules(conn: sqlite3.Connection, rules: Rules) -> None:
+    with conn:
+        conn.execute("INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE "
+                     "SET value = excluded.value, updated_at = excluded.updated_at", (RULES_KEY, rules.to_json(), now()))
+
+
 @dataclass
 class Message:
     artist_id: int
@@ -39,10 +106,15 @@ class Message:
     show_id: int
     text: str
     keys: list[tuple[str, str, int]] = field(default_factory=list)   # (alert key, kind, show id)
+    mode: str = PING        # ping | silent | record (nothing to post: every update in it is turned off; just record it)
 
     @property
     def first_line(self) -> str:
         return self.text.split("\n", 1)[0]
+
+    @property
+    def postable(self) -> bool:
+        return self.mode != "record"
 
 
 def fmt_day(d: date) -> str:
@@ -61,7 +133,7 @@ def fmt_when(value: str | None) -> str:
     return s
 
 
-def round_line(r: RoundView) -> str:
+def round_line(r: RoundView, extra: bool = True) -> str:
     bits = [r.name]
     tag = ", ".join(x for x in (ROUND_KIND.get(r.kind, ""), "lottery" if r.lottery else "") if x)
     if tag:
@@ -78,9 +150,9 @@ def round_line(r: RoundView) -> str:
     if r.state == "closed":
         when.append("closed")
     line = " ".join(bits) + (": " + ", ".join(when) if when else "")
-    if r.price:
+    if extra and r.price:
         line += f" · {r.price}"
-    if r.notes:
+    if extra and r.notes:
         line += f" · {r.notes}"
     return line
 
@@ -99,29 +171,38 @@ def deadline_bit(s: ShowView, focus: list[RoundView]) -> str:
     return ""
 
 
-def show_message(s: ShowView, kinds: list[str], focus: list[RoundView], app_url: str = "") -> str:
+def show_message(s: ShowView, kinds: list[str], focus: list[RoundView], app_url: str = "",
+                  include: dict[str, bool] | None = None) -> str:
+    """include: which optional parts to show (alerts.LINES; all by default). The first line and title always are."""
+    on = {k: True for k in LINES} | (include or {})
     lead = min(kinds, key=ORDER.index)
     where = s.city or s.venue or "venue TBA"
     first = " · ".join(b for b in (f"{EMOJI[lead]} [{s.tier}] {s.artist}", fmt_day(s.date) if s.date else "Date TBA",
                                    where,
                                    FIT_MARK[s.fit], deadline_bit(s, focus)) if b)
     lines = [first, f"**{s.title}**"]
-    place = s.place + (f" · {s.time_note}" if s.time_note else "")
-    if s.fit == fit.DETOUR and s.stay:
-        place += f" · you're in {s.stay} that night"
-    lines.append(place)
+    place = []
+    if on["place"]:
+        place.append(s.place + (f" · {s.time_note}" if s.time_note else ""))
+    if on["stay"] and s.fit == fit.DETOUR and s.stay:
+        place.append(f"you're in {s.stay} that night")
+    if place:
+        lines.append(" · ".join(place))
     if lead != "new_show":
         lines.append(f"*{', '.join(WHAT[k] for k in sorted(set(kinds), key=ORDER.index))}*")
-    shown = [r for r in s.rounds if r.state != "closed"] if lead in ("new_show", "date_set") else focus
-    for r in shown:
-        lines.append(f"• {round_line(r)}" + (f" — [apply / info](<{r.url}>)" if r.url else ""))
-    if s.notes:
+    if on["rounds"]:
+        shown = [r for r in s.rounds if r.state != "closed"] if lead in ("new_show", "date_set") else focus
+        for r in shown:
+            link = f" — [apply / info](<{r.url}>)" if r.url and on["links"] else ""
+            lines.append(f"• {round_line(r, on['round_extra'])}{link}")
+    if on["notes"] and s.notes:
         lines.append(f"_{s.notes}_")
-    links = [f"[{label}](<{url}>)" for url, label in s.links[-3:]]
-    if app_url:
-        links.append(f"[all shows](<{app_url.rstrip('/')}/shows#show-{s.id}>)")
-    if links:
-        lines.append(" · ".join(links))
+    if on["links"]:
+        links = [f"[{label}](<{url}>)" for url, label in s.links[-3:]]
+        if app_url:
+            links.append(f"[all shows](<{app_url.rstrip('/')}/shows#show-{s.id}>)")
+        if links:
+            lines.append(" · ".join(links))
     return "\n".join(lines)
 
 
@@ -144,34 +225,72 @@ def facts(s: ShowView) -> list[tuple[str, str, int | None]]:
     return out
 
 
-def build(conn: sqlite3.Connection, app_url: str = "", at: datetime | None = None) -> list[Message]:
+def build(conn: sqlite3.Connection, app_url: str = "", at: datetime | None = None,
+          rules: Rules | None = None) -> list[Message]:
     """One message per show that has anything not alerted yet, read from the stored shows (not from one scan's
     events), so shows found by a scan that was killed before its alerts still alert on the next one.
-    Hidden shows and shows already past are left out."""
+    Hidden shows and shows already past are left out.
+
+    rules (default: the saved Alerts settings): a show whose fit is set to "Don't post" is left out and stays
+    unsent, so it's sent if a trip or date change makes it fit later. A message whose updates are all turned off
+    is only recorded (mode "record"), so it doesn't come back."""
     at = at or datetime.now(JST)
+    rules = rules or load_rules(conn)
     sent = {r[0] for r in conn.execute("SELECT key FROM alerts")}
     messages, shows = [], {}
     for s in load_shows(conn, at=at):
         if s.date and s.date < at.date():
+            continue
+        mode = rules.mode(s.fit)
+        if mode == OFF:
             continue
         fs = facts(s)
         due = [f for f in fs if f[0] not in sent]
         if not due:
             continue
         shows[s.id] = s
-        round_ids = {rid for _, _, rid in due if rid}
         if f"show:{s.id}" not in sent:
             kinds = ["new_show"] + (["cancelled"] if s.cancelled else [])
+            round_ids = {rid for _, _, rid in due if rid}
         else:
             new_rounds = {rid for k, kind, rid in due if kind == "new_round"}
+            due = [f for f in due if rules.kinds.get(f[1], True)]
             kinds = [kind for k, kind, rid in due if not (kind == "deadline" and rid in new_rounds)]
+            round_ids = {rid for _, _, rid in due if rid}
+        kinds = [k for k in dict.fromkeys(kinds) if rules.kinds.get(k, True)]
+        keys = [(k, kind, s.id) for k, kind, _ in fs]
+        if not kinds:
+            messages.append(Message(s.artist_id, s.artist, s.id, "", keys, "record"))
+            continue
         focus = [r for r in s.rounds if r.id in round_ids]
-        text = show_message(s, list(dict.fromkeys(kinds)), focus, app_url)
+        text = show_message(s, kinds, focus, app_url, rules.lines)
         # every current fact is recorded once sent, so what this message already says isn't sent again
-        messages.append(Message(s.artist_id, s.artist, s.id, text, [(k, kind, s.id) for k, kind, _ in fs]))
+        messages.append(Message(s.artist_id, s.artist, s.id, text, keys, mode))
     far = datetime(9999, 1, 1, tzinfo=JST)
     messages.sort(key=lambda m: (shows[m.show_id].next_deadline or far, shows[m.show_id].date or date.max))
     return messages
+
+
+def sample_show(show_fit: str) -> ShowView:
+    """A made-up show for the Alerts card's preview, placed so it has the fit asked for."""
+    day = {fit.OUTSIDE: date(2027, 3, 3), fit.TBA: None}.get(show_fit, date(2027, 2, 4))
+    s = ShowView(0, 0, "UVERworld", "B", "LIVE HOUSE TOUR 2027", day, "17:30 / 18:30", "KT Zepp Yokohama",
+                 "Yokohama", "Kanagawa", "tour", "FC members only", False, False, "", fit=show_fit,
+                 stay="Nagoya" if show_fit == fit.DETOUR else None)
+    s.rounds = [RoundView(1, "FC先行", "fanclub", True, "2026-11-06T12:00", "2026-11-15T23:59", None,
+                          "https://example.com/apply", "¥9,800", "2 per person", "open"),
+                RoundView(2, "一般発売", "general", False, "2026-12-19T10:00", None, None, "", "", "", "upcoming")]
+    s.links = [("https://x.com/uverworld_dr2", "X")]
+    return s
+
+
+def preview(rules: Rules, show_fit: str, app_url: str = "") -> tuple[str, str]:
+    """(message text, mode) of a new show with this fit under these rules; text is "" when it isn't posted."""
+    mode = rules.mode(show_fit)
+    if mode == OFF or not rules.kinds.get("new_show", True):
+        return "", OFF
+    s = sample_show(show_fit)
+    return show_message(s, ["new_show"], s.rounds, app_url or "https://concerts.example.com", rules.lines), mode
 
 
 def split(text: str, limit: int = DISCORD_LIMIT) -> list[str]:
@@ -279,24 +398,93 @@ def finished_text(conn: sqlite3.Connection, run_id: int, app_url: str = "", stop
              f"${run['claude_usd'] or 0:.3f} Claude"]
     if stopped and run["current"]:
         lines.append(f"Last thing it did: {run['current'].removeprefix('Stopped: ')}"[:300])
-    errors = [e.strip() for e in (run["errors"] or "").splitlines() if e.strip()]
-    for e in errors[:5]:
-        lines.append(f"• {e[:160]}")
-    if len(errors) > 5:
-        lines.append(f"• +{len(errors) - 5} more on the scan page")
+    lines += error_lines(conn, run_id, run["errors"] or "")
     lines.append(scan_link(app_url, run_id))
     return "\n".join(lines)
 
 
-def notify(settings: Settings, text: str, client: httpx.Client | None = None) -> str | None:
-    """Post a silent notice (no ping, no phone notification) if DISCORD_SCAN_NOTICES is on. Never raises;
-    returns the error, if any."""
+SOURCE_NAME = {"x": "𝕏 X", "instagram": "Instagram", "website": "Website", "fanclub": "Fan club"}
+SOURCE_ORDER = ["x", "instagram", "website", "fanclub"]
+COUNT_WORDS = {"x": ("X account", "X accounts"), "instagram": ("Instagram profile", "Instagram profiles"),
+               "website": ("website", "websites"), "fanclub": ("fan club page", "fan club pages"),
+               "other": ("other", "other")}
+MAX_ERROR_LINES = 12          # X errors are always all listed; the rest up to this many lines
+
+
+@dataclass
+class SourceError:
+    kind: str                 # x | instagram | website | fanclub | other
+    artist: str
+    source: str               # @handle or page
+    error: str
+
+
+def source_errors(conn: sqlite3.Connection, run_id: int, run_errors: str) -> tuple[list[SourceError], int]:
+    """Every error of a scan with its artist and source (X first), and how many X accounts it read."""
+    steps = conn.execute("SELECT kind, label, sublabel, status, error FROM run_steps WHERE run_id = ? AND phase = 'read' "
+                         "ORDER BY position", (run_id,)).fetchall()
+    out, labels = [], set()
+    for s in steps:
+        if s["status"] == "failed" or s["error"]:
+            out.append(SourceError(s["kind"], s["sublabel"], s["label"], s["error"] or "failed"))
+            labels.add(s["label"])
+    for line in (e.strip() for e in run_errors.splitlines()):
+        if not line or line.split(": ", 1)[0] in labels:
+            continue                # already listed from its step
+        if line.startswith("X / Instagram:") and any(e.kind in ("x", "instagram") for e in out):
+            continue                # the whole Apify phase broke: each account is listed already
+        out.append(SourceError("other", "", "", line))
+    order = {k: i for i, k in enumerate(SOURCE_ORDER)}
+    out.sort(key=lambda e: order.get(e.kind, 99))
+    return out, sum(1 for s in steps if s["kind"] == "x")
+
+
+def error_lines(conn: sqlite3.Connection, run_id: int, run_errors: str) -> list[str]:
+    """'𝕏 X: all 29 accounts OK' (or how many failed), then each error with its source and artist."""
+    errs, x_total = source_errors(conn, run_id, run_errors)
+    x_bad = [e for e in errs if e.kind == "x"]
+    lines = []
+    if x_total:
+        lines.append(f"❗ 𝕏 X: {len(x_bad)} of {plural(x_total, 'account')} failed" if x_bad
+                     else f"𝕏 X: all {plural(x_total, 'account')} OK ✅")
+    if not errs:
+        return lines
+    by_kind = [plural(sum(1 for e in errs if e.kind == k), *COUNT_WORDS[k])
+               for k in SOURCE_ORDER + ["other"] if any(e.kind == k for e in errs)]
+    lines.append(f"{plural(len(errs), 'error')}: {', '.join(by_kind)}")
+    room = max(MAX_ERROR_LINES, len(x_bad))
+    for e in errs[:room]:
+        if e.kind == "other":
+            lines.append(f"• {e.error[:200]}")
+        else:
+            who = " · ".join(b for b in (SOURCE_NAME.get(e.kind, e.kind), e.artist, e.source) if b)
+            lines.append(f"• {who}: {(e.error.splitlines() or [''])[0][:160]}")
+    if len(errs) > room:
+        lines.append(f"• +{len(errs) - room} more on the scan page")
+    return lines
+
+
+def finished_pings(conn: sqlite3.Connection, run_id: int) -> bool:
+    """The "scan finished" notice pings you when an X account failed (Alerts settings, on by default)."""
+    if not load_rules(conn).x_fail_ping:
+        return False
+    run = conn.execute("SELECT errors FROM runs WHERE id = ?", (run_id,)).fetchone()
+    errs, _ = source_errors(conn, run_id, (run["errors"] if run else "") or "")
+    return any(e.kind == "x" for e in errs)
+
+
+def notify(settings: Settings, text: str, client: httpx.Client | None = None, ping: bool = False) -> str | None:
+    """Post a notice if DISCORD_SCAN_NOTICES is on: silent (no ping, no phone notification), or with ping=True a
+    normal message that pings you (an X account failed). Never raises; returns the error, if any."""
     if not (settings.discord_scan_notices and settings.discord_webhook):
         return None
     own = client is None
     client = client or httpx.Client(timeout=15)
     try:
-        send_discord(settings.discord_webhook, text, client, silent=True)
+        if ping and settings.discord_user_id:
+            send_discord(settings.discord_webhook, text, client, ping=settings.discord_user_id)
+        else:
+            send_discord(settings.discord_webhook, text, client, silent=True)
         return None
     except Exception as e:  # noqa: BLE001 - a notice must never break a scan or a page
         log.warning("Discord scan notice failed: %s", e)
@@ -313,6 +501,16 @@ def deliver(conn: sqlite3.Connection, settings: Settings, messages: list[Message
 
     on_sent(count so far, message) is called after each message Discord accepted (for live progress).
     """
+    def record(m: Message) -> None:
+        with conn:
+            conn.executemany(
+                "INSERT OR IGNORE INTO alerts (key, artist_id, show_id, kind, text, sent_at) VALUES (?, ?, ?, ?, ?, ?)",
+                [(k, m.artist_id, sid, kind, m.text[:4000], now()) for k, kind, sid in m.keys])
+
+    for m in messages:
+        if not m.postable:              # every update in it is turned off in the Alerts settings
+            record(m)
+    messages = [m for m in messages if m.postable]
     if not messages:
         return 0, []
     if not settings.discord_webhook:
@@ -325,16 +523,16 @@ def deliver(conn: sqlite3.Connection, settings: Settings, messages: list[Message
             if i and pause:
                 time.sleep(pause)          # stay under Discord's ~30 messages a minute per channel
             try:
-                send_discord(settings.discord_webhook, m.text, client, ping=settings.discord_user_id)
+                if m.mode == PING:
+                    send_discord(settings.discord_webhook, m.text, client, ping=settings.discord_user_id)
+                else:
+                    send_discord(settings.discord_webhook, m.text, client, silent=True)
             except Exception as e:  # noqa: BLE001 - keep the alert for the next scan
                 log.error("Discord alert for %s failed: %s", m.artist, e)
                 errors.append(f"Discord: {e}"[:300])
                 continue
             sent += 1
-            with conn:
-                conn.executemany(
-                    "INSERT OR IGNORE INTO alerts (key, artist_id, show_id, kind, text, sent_at) VALUES (?, ?, ?, ?, ?, ?)",
-                    [(k, m.artist_id, sid, kind, m.text[:4000], now()) for k, kind, sid in m.keys])
+            record(m)
             if on_sent:
                 on_sent(sent, m)
     finally:

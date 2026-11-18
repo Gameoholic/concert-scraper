@@ -495,6 +495,33 @@ body.page-login { padding-bottom: 0; }
   .schedule-form { grid-template-columns: 1fr 1fr; align-items: start; }
   .schedule-form .btn-primary { grid-column: 1 / -1; justify-self: start; min-width: 160px; }
 }
+
+/* scans: Discord alert settings */
+.alert-rules { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.alert-form { display: flex; flex-direction: column; gap: 20px; }
+.alert-form .btn-primary { align-self: stretch; }
+.fit-modes { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.fit-mode { display: flex; align-items: center; gap: 12px; }
+.fit-mode-name { flex: 1; font-size: 15px; color: var(--ink); font-weight: 500; }
+.fit-mode select { width: auto; min-width: 150px; flex: none; }
+.checks { display: flex; flex-direction: column; gap: 10px; }
+.check { display: flex; align-items: flex-start; gap: 10px; font-size: 15px; font-weight: 400; color: var(--ink); cursor: pointer; line-height: 1.35; }
+.check input { width: 20px; height: 20px; min-height: 0; margin: 0; flex: none; accent-color: var(--accent); }
+.check.is-fixed { color: var(--muted); cursor: default; }
+.preview-pick select { width: auto; min-width: 140px; }
+.alert-preview { display: flex; flex-direction: column; gap: 8px; }
+.alert-preview-mode { font-size: 13px; font-weight: 600; color: var(--muted); }
+.alert-preview-mode.mode-ping { color: var(--ok-ink); }
+.discord-msg {
+  white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.45; color: var(--ink);
+  background: var(--fill); border-left: 3px solid var(--accent); border-radius: 8px; padding: 10px 12px;
+}
+.discord-msg u { color: var(--accent-text); text-decoration: none; }
+.discord-msg .mention { color: var(--accent-text); background: var(--accent-soft); border-radius: 4px; padding: 0 3px; }
+@media (min-width: 640px) {
+  .fit-modes { grid-template-columns: 1fr 1fr; column-gap: 24px; }
+  .alert-form .btn-primary { align-self: flex-start; min-width: 160px; }
+}
 .stopped { padding: 16px; display: flex; flex-direction: column; gap: 12px; border: 1.5px solid var(--warn-line); background: var(--warn-bg); }
 .stopped-head { display: flex; gap: 12px; align-items: flex-start; }
 .stopped-icon { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;

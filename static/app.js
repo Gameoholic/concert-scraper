@@ -199,6 +199,22 @@ if (trip) {
   });
 }
 
+// ---------- Discord alert settings: live preview of the settings in the form (not saved until Save)
+const alertForm = $("[data-alert-form]");
+if (alertForm) {
+  const refresh = debounce(async () => {
+    try {
+      const res = await post("/scans/alerts/preview", new FormData(alertForm));
+      if (!res.ok) return;
+      const box = $("[data-alert-preview]", alertForm);
+      const doc = new DOMParser().parseFromString(await res.text(), "text/html");
+      const fresh = doc.querySelector("[data-alert-preview]");
+      if (box && fresh) box.replaceWith(fresh);
+    } catch (err) { /* offline for a moment: the preview just stays */ }
+  }, 150);
+  alertForm.addEventListener("change", refresh);
+}
+
 // ---------- while a scan runs: show progress, reload when it's done
 if ($(".live-dot") && !$("[data-progress]")) {
   const summary = $("[data-scan-summary]");

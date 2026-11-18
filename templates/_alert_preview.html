@@ -1,0 +1,11 @@
+<div class="alert-preview" id="alert-preview" data-alert-preview aria-live="polite">
+  <p class="alert-preview-mode mode-{{ preview_mode }}">
+    {% if preview_mode == 'ping' %}Pings you{% if not ping_set %} (once DISCORD_USER_ID is set in .env){% endif %}
+    {% elif preview_mode == 'silent' %}Posted without a ping: no phone notification
+    {% else %}Not posted{% endif %}
+  </p>
+  {% if preview_text %}
+  <div class="discord-msg">{{ preview_text | discord }}{% if preview_mode == 'ping' %}
+<span class="mention">@you</span>{% endif %}</div>
+  {% endif %}
+</div>

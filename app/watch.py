@@ -758,8 +758,10 @@ class Scan:
     # ------------------------------------------------------------ alerts
 
     def send_alerts(self, dry_run: bool) -> None:
-        msgs = self.report.messages
+        msgs = [m for m in self.report.messages if m.postable]
         key = "alerts"
+        if not dry_run:     # updates turned off in the Alerts settings: recorded, never posted
+            alerts.deliver(self.conn, self.s, [m for m in self.report.messages if not m.postable])
         if dry_run:
             self.progress.finish(key, "skipped", total=len(msgs),
                                  detail=f"dry run: {len(msgs)} alert(s) printed, not sent")
@@ -911,7 +913,8 @@ def main(argv: list[str] | None = None) -> int:
     notices = settings.discord_scan_notices and not args.dry_run      # a dry run never posts anything
 
     def stopped(c: sqlite3.Connection, old_id: int) -> None:          # an earlier scan found dead on the way in
-        alerts.notify(settings, alerts.finished_text(c, old_id, settings.app_url, stopped=True))
+        alerts.notify(settings, alerts.finished_text(c, old_id, settings.app_url, stopped=True),
+                      ping=alerts.finished_pings(c, old_id))
     try:
         run_id = store.start_run(conn, args.trigger, scope, args.dry_run, pid=os.getpid(), resumed_from=args.resume,
                                  on_stopped=stopped if notices else None)
@@ -931,9 +934,10 @@ def main(argv: list[str] | None = None) -> int:
         report = scan.run(args.artist, done_before, args.resume)
         scan.send_alerts(args.dry_run)
         if args.dry_run:
-            print(f"\n=== DRY RUN: {len(report.messages)} alert(s) would be sent ===\n")
-            for m in report.messages:
-                print(m.text, "\n" + "-" * 60)
+            post = [m for m in report.messages if m.postable]
+            print(f"\n=== DRY RUN: {len(post)} alert(s) would be sent ===\n")
+            for m in post:
+                print(f"[{alerts.MODES[m.mode]}]\n{m.text}", "\n" + "-" * 60)
         status = "partial" if report.errors else "ok"
     except Exception as e:  # noqa: BLE001
         log.exception("Scan failed")
@@ -957,7 +961,8 @@ def main(argv: list[str] | None = None) -> int:
                          claude_usd=round(report.claude_usd, 4), summary=summary,
                          errors="\n".join(report.errors)[:8000])
         if notices:
-            alerts.notify(settings, alerts.finished_text(conn, run_id, settings.app_url))
+            alerts.notify(settings, alerts.finished_text(conn, run_id, settings.app_url),
+                          ping=alerts.finished_pings(conn, run_id))
         conn.close()
         if args.dry_run:
             shutil.rmtree(path.parent, ignore_errors=True)

@@ -71,9 +71,14 @@ uverworld.jp · X · all shows
 
 🆕 new show · 📅 date announced · 🎟 new ticket round · ⏰ new deadline or opening date · ❌ cancelled.
 
-Every show alert **pings you** (`@you` on its last line) once `DISCORD_USER_ID` is set; without it they're sent the same way, just without the ping.
+What's sent is set on the Scans page, **Discord alerts** card (saved in the app, from the next scan on), with a live preview of a message:
 
-Each scan also posts a **silent** message when it starts and when it finishes (Discord's "no notification" flag, no ping, so your phone doesn't buzz). Started: who started it (scheduled, from the app, by hand, or a resume), which artists, how many sources. Finished: done / done with errors / failed / stopped partway, how long it took, new shows, updates, alerts sent, the errors (first five), what Apify and Claude cost, and a link to the scan's page. A scan that dies partway gets its "stopped" message as soon as the app notices. `--dry-run` posts nothing. Turn these off with `DISCORD_SCAN_NOTICES=0`.
+- **When a show fits / is a detour / is outside the trip / has no date yet:** ping me, post without a ping (no phone notification), or don't post. Default: only shows that fit ping you (`@you` on the last line, once `DISCORD_USER_ID` is set); the rest are posted silently. A show that isn't posted stays unsent, so it goes out if a trip or date change makes it fit.
+- **Which updates alert:** new show, date announced, new ticket round, a round's new opening or closing date, cancelled. One turned off is recorded as handled, not posted.
+- **What a message includes:** the first line and the title always; venue and time, where you sleep that night (detours), ticket rounds, their prices and notes, show notes, and links can each be left out.
+- **Ping me when an X account failed** (on by default): the "scan finished" message then pings you instead of being silent.
+
+Each scan also posts a **silent** message when it starts and when it finishes (Discord's "no notification" flag, no ping, so your phone doesn't buzz). Started: who started it (scheduled, from the app, by hand, or a resume), which artists, how many sources. Finished: done / done with errors / failed / stopped partway, how long it took, new shows, updates, alerts sent, whether every X account was read (`𝕏 X: all 29 accounts OK ✅` or `❗ 𝕏 X: 2 of 29 accounts failed`), how many errors of each kind, each error with its source and artist (X first; every X error, then up to 12 lines), what Apify and Claude cost, and a link to the scan's page. A scan that dies partway gets its "stopped" message as soon as the app notices. `--dry-run` posts nothing. Turn these off with `DISCORD_SCAN_NOTICES=0`.
 
 Setting up the webhook (free, 2 minutes):
 

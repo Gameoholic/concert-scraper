@@ -48,6 +48,65 @@
   </form>
 </section>
 
+<section class="card alert-rules" id="alerts" aria-labelledby="alerts-title">
+  <h2 class="eyebrow" id="alerts-title">Discord alerts</h2>
+  <form method="post" action="/scans/alerts" class="alert-form" data-alert-form>
+    <fieldset class="field">
+      <legend>When a show…</legend>
+      <div class="fit-modes">
+        {% for f in fits %}
+        <label class="fit-mode">
+          <span class="fit-mode-name">{{ fit_marks[f] }}</span>
+          <select name="fit_{{ f }}" aria-label="{{ fit_labels[f] }}">
+            {% for m, label in modes.items() %}<option value="{{ m }}" {% if rules.fit[f] == m %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </label>
+        {% endfor %}
+      </div>
+      <span class="hint">A show that isn't posted is sent later if a trip or date change makes it fit.</span>
+    </fieldset>
+
+    <fieldset class="field">
+      <legend>Send an alert for</legend>
+      <div class="checks">
+        {% for k, label in kind_labels.items() %}
+        <label class="check"><input type="checkbox" name="kind_{{ k }}" value="1" {% if rules.kinds[k] %}checked{% endif %}> {{ label }}</label>
+        {% endfor %}
+      </div>
+    </fieldset>
+
+    <fieldset class="field">
+      <legend>Each message includes</legend>
+      <div class="checks">
+        <label class="check is-fixed"><input type="checkbox" checked disabled> First line (artist, date, city, fit, deadline) and the show's title</label>
+        {% for k, label in line_labels.items() %}
+        <label class="check"><input type="checkbox" name="line_{{ k }}" value="1" {% if rules.lines[k] %}checked{% endif %}> {{ label }}</label>
+        {% endfor %}
+      </div>
+    </fieldset>
+
+    <fieldset class="field">
+      <legend>Scan finished</legend>
+      <div class="checks">
+        <label class="check"><input type="checkbox" name="x_fail_ping" value="1" {% if rules.x_fail_ping %}checked{% endif %}> Ping me when an X account failed (otherwise it's silent)</label>
+      </div>
+    </fieldset>
+
+    <fieldset class="field preview-field">
+      <legend>Preview</legend>
+      <label class="unit-input preview-pick">
+        <span>A new show that's</span>
+        <select name="preview_fit" aria-label="Preview a show that is" data-preview-fit>
+          {% for f in fits %}<option value="{{ f }}" {% if f == preview_fit %}selected{% endif %}>{{ fit_labels[f] | lower }}</option>{% endfor %}
+        </select>
+      </label>
+      {% include "_alert_preview.html" %}
+    </fieldset>
+
+    <button class="btn-primary">Save</button>
+  </form>
+</section>
+
 <section class="card setup-card">
   <dl class="setup">
     {% for name, ok in keys.items() %}

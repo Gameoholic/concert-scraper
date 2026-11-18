@@ -5,7 +5,9 @@ Run: uvicorn app.main:create_app --factory
 
 from __future__ import annotations
 
+import html
 import math
+import re
 import sqlite3
 import subprocess
 import sys
@@ -18,6 +20,7 @@ from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from markupsafe import Markup
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import alerts, db, fit, progress, store
@@ -45,7 +48,17 @@ def day(d: date | None) -> str:
 templates = Jinja2Templates(directory=ROOT / "templates")
 templates.env.globals.update(KINDS=KINDS, SHORT=SHORT, COVERAGE_KINDS=COVERAGE_KINDS, TIERS=db.TIERS,
                              FIT_LABEL=fit.FIT_LABEL)
-templates.env.filters.update(jst=jst, when=fmt_when, day=day, round_line=round_line)
+def discord(text: str) -> Markup:
+    """Discord markdown as HTML, for the alert preview: **bold**, *italic*, _italic_, [label](<url>)."""
+    out = html.escape(text)
+    out = re.sub(r"\[([^\]]+)\]\(&lt;[^&]*&gt;\)", r"<u>\1</u>", out)
+    out = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", out)
+    out = re.sub(r"(?<![\w*])\*(?!\s)(.+?)\*(?![\w*])", r"<i>\1</i>", out)
+    out = re.sub(r"(?<!\w)_(?!\s)(.+?)_(?!\w)", r"<i>\1</i>", out)
+    return Markup(out)
+
+
+templates.env.filters.update(jst=jst, when=fmt_when, day=day, round_line=round_line, discord=discord)
 
 MISSING_LABEL = {"instagram": "an Instagram account", "x": "an X account", "website": "a website"}
 FIT_FILTERS = ("fits", "detour", "outside", "tba")
@@ -99,7 +112,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         background so the page doesn't wait for Discord."""
         if settings.discord_scan_notices and settings.discord_webhook:
             text = alerts.finished_text(conn, run_id, settings.app_url, stopped=True)
-            threading.Thread(target=app.state.notify, args=(settings, text), daemon=True).start()
+            kw = {"ping": True} if alerts.finished_pings(conn, run_id) else {}
+            threading.Thread(target=app.state.notify, args=(settings, text), kwargs=kw, daemon=True).start()
 
     app.add_middleware(OriginCheck)
     app.add_middleware(SessionMiddleware, secret_key=settings.secret_key, session_cookie="cw_session",
@@ -432,6 +446,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         flash(request, f"Saved. Next scheduled scan: {ctx['next_scan']} Japan time.")
         return RedirectResponse("/scans#schedule", status_code=303)
 
+    def alerts_context(rules: alerts.Rules, show_fit: str = fit.FITS) -> dict:
+        show_fit = show_fit if show_fit in alerts.FITS_IN_ORDER else fit.FITS
+        text, mode = alerts.preview(rules, show_fit, settings.app_url)
+        return {"rules": rules, "preview_fit": show_fit, "preview_text": text, "preview_mode": mode,
+                "fit_labels": fit.FIT_LABEL, "fit_marks": alerts.FIT_MARK, "modes": alerts.MODES,
+                "kind_labels": alerts.KIND_LABEL, "line_labels": alerts.LINES, "fits": alerts.FITS_IN_ORDER,
+                "ping_set": bool(settings.discord_user_id)}
+
+    @app.post("/scans/alerts", dependencies=[Depends(require_login)])
+    async def save_alert_rules(request: Request, conn=Depends(get_conn)):
+        alerts.save_rules(conn, alerts.Rules.from_form(await request.form()))
+        flash(request, "Alert settings saved. They apply from the next scan.")
+        return RedirectResponse("/scans#alerts", status_code=303)
+
+    @app.post("/scans/alerts/preview", dependencies=[Depends(require_login)])
+    async def alert_preview(request: Request):
+        """The Alerts card's preview for the settings in the form (not saved), as an HTML fragment."""
+        form = await request.form()
+        return templates.TemplateResponse(request, "_alert_preview.html",
+                                          alerts_context(alerts.Rules.from_form(form), str(form.get("preview_fit", ""))))
+
     @app.get("/scans", dependencies=[Depends(require_login)])
     def scans_page(request: Request, started: str = "", conn=Depends(get_conn)):
         artists = db.list_artists(conn)
@@ -451,7 +486,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         stopped = last if last and not running and not starting and store.resumable(conn, last["id"]) else None
         return render(request, "scans.html", runs=store.recent_runs(conn, 20), problems=problems, never=never,
                       apify_usd=apify_usd, claude_usd=claude_usd, keys=keys, running=running, snap=snap,
-                      starting=starting, after_run=after, stopped=stopped, nav="scans", **schedule_context(conn))
+                      starting=starting, after_run=after, stopped=stopped, nav="scans", **schedule_context(conn),
+                      **alerts_context(alerts.load_rules(conn)))
 
     @app.get("/scans/{run_id}", dependencies=[Depends(require_login)])
     def run_page(request: Request, run_id: int, conn=Depends(get_conn)):

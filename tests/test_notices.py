@@ -78,11 +78,12 @@ def test_no_user_id_means_no_ping(settings, conn):
 
 def test_finished_notice_lists_errors_and_failed_status(settings, conn):
     run_id = store.start_run(conn, "ui", "artist:1,artist:2", False)
-    errors = [f"@acct{i}: Apify X scraper: run failed" for i in range(7)]
+    errors = [f"Artist {i}: 3 post(s) waiting; ANTHROPIC_API_KEY is not set" for i in range(15)]
     store.finish_run(conn, run_id, status="partial", errors="\n".join(errors))
     text = alerts.finished_text(conn, run_id, "")
-    assert text.startswith("⚠️ Scan done, with errors") and text.count("\n• ") == 6
-    assert "• +2 more on the scan page" in text and text.endswith(f"scan #{run_id}")
+    assert text.startswith("⚠️ Scan done, with errors") and "\n15 errors: 15 other\n" in text
+    assert text.count("\n• ") == alerts.MAX_ERROR_LINES + 1
+    assert "• +3 more on the scan page" in text and text.endswith(f"scan #{run_id}")
     store.finish_run(conn, run_id, status="error")
     assert alerts.finished_text(conn, run_id).startswith("❌ Scan failed")
 
